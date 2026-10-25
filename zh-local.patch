@@ -1,0 +1,1423 @@
+From b98667cf11f60b07f53417f971536f9a9179a8c8 Mon Sep 17 00:00:00 2001
+From: handsomeXiaowang <36980157+handsomeXiaowang@users.noreply.github.com>
+Date: Sun, 25 Oct 2026 12:58:45 +0800
+Subject: [PATCH] Add Chinese localization and localize UI option choices
+
+- Add zh locale tables (340+ strings) across 12 locales.py files
+- Add translator.localize_choices() mapping raw values to display labels
+- Wrap ~45 UI component choices with localize_choices() as (label, value) tuples
+- Extend Language type to include zh and set CURRENT_LANGUAGE to zh
+- Localize processor names, mask regions, presets, strategies, model names
+- Translate all 157 deep_swapper celebrity models via base-name normalization
+- Ignore venv directory
+
+Backend logic and CLI keep receiving raw English identifiers; only the UI
+layer renders localized labels.
+
+Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>
+---
+ .gitignore                                    |   2 +
+ facefusion/locales.py                         | 411 ++++++++++++++++++
+ .../modules/age_modifier/locales.py           |  17 +-
+ .../modules/background_remover/locales.py     |  23 +-
+ .../modules/deep_swapper/locales.py           |  15 +-
+ .../modules/expression_restorer/locales.py    |  17 +-
+ .../modules/face_debugger/locales.py          |  13 +-
+ .../processors/modules/face_editor/locales.py |  41 +-
+ .../modules/face_enhancer/locales.py          |  17 +-
+ .../modules/face_swapper/locales.py           |  17 +-
+ .../modules/frame_colorizer/locales.py        |  17 +-
+ .../modules/frame_enhancer/locales.py         |  15 +-
+ .../processors/modules/lip_syncer/locales.py  |  15 +-
+ facefusion/translator.py                      |  31 +-
+ facefusion/types.py                           |   2 +-
+ .../uis/components/age_modifier_options.py    |   2 +-
+ .../components/background_remover_options.py  |   2 +-
+ .../uis/components/benchmark_options.py       |   2 +-
+ .../uis/components/deep_swapper_options.py    |   2 +-
+ facefusion/uis/components/download.py         |   2 +-
+ facefusion/uis/components/execution.py        |   2 +-
+ .../components/expression_restorer_options.py |   4 +-
+ .../uis/components/face_debugger_options.py   |   2 +-
+ facefusion/uis/components/face_detector.py    |   2 +-
+ .../uis/components/face_editor_options.py     |   2 +-
+ .../uis/components/face_enhancer_options.py   |   2 +-
+ facefusion/uis/components/face_landmarker.py  |   2 +-
+ facefusion/uis/components/face_masker.py      |  10 +-
+ facefusion/uis/components/face_selector.py    |   8 +-
+ .../uis/components/face_swapper_options.py    |   2 +-
+ .../uis/components/frame_colorizer_options.py |   2 +-
+ .../uis/components/frame_enhancer_options.py  |   2 +-
+ facefusion/uis/components/job_list_options.py |   2 +-
+ facefusion/uis/components/job_manager.py      |   6 +-
+ facefusion/uis/components/job_runner.py       |   4 +-
+ .../uis/components/lip_syncer_options.py      |   2 +-
+ facefusion/uis/components/memory.py           |   2 +-
+ facefusion/uis/components/output_options.py   |   6 +-
+ facefusion/uis/components/preview_options.py  |   4 +-
+ facefusion/uis/components/processors.py       |  11 +-
+ facefusion/uis/components/temp_frame.py       |   2 +-
+ facefusion/uis/components/terminal.py         |   2 +-
+ facefusion/uis/components/ui_workflow.py      |   2 +-
+ facefusion/uis/components/voice_extractor.py  |   2 +-
+ facefusion/uis/components/webcam_options.py   |   4 +-
+ facefusion/uis/components/workflow.py         |   2 +-
+ 46 files changed, 691 insertions(+), 63 deletions(-)
+
+diff --git a/.gitignore b/.gitignore
+index ed7bab3..16a4c20 100644
+--- a/.gitignore
++++ b/.gitignore
+@@ -1,4 +1,6 @@
+ __pycache__
++.venv
++venv
+ .assets
+ .claude
+ .caches
+diff --git a/facefusion/locales.py b/facefusion/locales.py
+index bcc982f..c203e80 100644
+--- a/facefusion/locales.py
++++ b/facefusion/locales.py
+@@ -93,6 +93,20 @@ LOCALES : Locales =\
+ 		'colon': ':',
+ 		'question_mark': '?',
+ 		'exclamation_mark': '!',
++		'processors':
++		{
++			'face_swapper': 'face_swapper',
++			'age_modifier': 'age_modifier',
++			'background_remover': 'background_remover',
++			'deep_swapper': 'deep_swapper',
++			'expression_restorer': 'expression_restorer',
++			'face_debugger': 'face_debugger',
++			'face_editor': 'face_editor',
++			'face_enhancer': 'face_enhancer',
++			'frame_colorizer': 'frame_colorizer',
++			'frame_enhancer': 'frame_enhancer',
++			'lip_syncer': 'lip_syncer'
++		},
+ 		'help':
+ 		{
+ 			'config_path': 'choose the config file to override defaults',
+@@ -269,5 +283,402 @@ LOCALES : Locales =\
+ 			'webcam_mode_radio': 'WEBCAM MODE',
+ 			'webcam_resolution_dropdown': 'WEBCAM RESOLUTION'
+ 		}
++	},
++	'zh':
++	{
++		'python_not_supported': 'Python 版本不受支持，请升级到 {version} 或更高',
++		'dependency_not_installed': '{dependency} 未安装',
++		'creating_temp': '正在创建临时资源',
++		'extracting_frames': '正在以 {resolution} 分辨率、每秒 {fps} 帧提取画面',
++		'extracting_frames_succeeded': '画面提取成功',
++		'extracting_frames_failed': '画面提取失败',
++		'analysing': '分析中',
++		'extracting': '提取中',
++		'streaming': '推流中',
++		'processing': '处理中',
++		'merging': '合并中',
++		'downloading': '下载中',
++		'temp_frames_not_found': '未找到临时画面',
++		'copying_image': '正在以 {resolution} 分辨率复制图像',
++		'copying_image_succeeded': '图像复制成功',
++		'copying_image_failed': '图像复制失败',
++		'finalizing_image': '正在以 {resolution} 分辨率输出图像',
++		'finalizing_image_succeeded': '图像输出成功',
++		'finalizing_image_skipped': '已跳过图像输出',
++		'merging_video': '正在以 {resolution} 分辨率、每秒 {fps} 帧合并视频',
++		'merging_video_succeeded': '视频合并成功',
++		'merging_video_failed': '视频合并失败',
++		'skipping_audio': '跳过音频',
++		'replacing_audio_succeeded': '音频替换成功',
++		'replacing_audio_skipped': '已跳过音频替换',
++		'restoring_audio_succeeded': '音频还原成功',
++		'restoring_audio_skipped': '已跳过音频还原',
++		'clearing_temp': '正在清理临时资源',
++		'processing_stopped': '处理已停止',
++		'processing_image_succeeded': '图像处理成功，耗时 {seconds} 秒',
++		'processing_image_failed': '图像处理失败',
++		'processing_video_succeeded': '视频处理成功，耗时 {seconds} 秒',
++		'processing_video_failed': '视频处理失败',
++		'choose_image_source': '选择一张图像作为源',
++		'choose_audio_source': '选择一段音频作为源',
++		'choose_video_target': '选择一段视频作为目标',
++		'choose_image_or_video_target': '选择一张图像或一段视频作为目标',
++		'specify_image_or_video_output': '在目录中指定输出的图像或视频',
++		'match_target_and_output_extension': '使目标与输出的扩展名保持一致',
++		'no_source_face_detected': '未检测到源人脸',
++		'processor_not_loaded': '处理器 {processor} 加载失败',
++		'processor_not_implemented': '处理器 {processor} 未正确实现',
++		'ui_layout_not_loaded': '界面布局 {ui_layout} 加载失败',
++		'ui_layout_not_implemented': '界面布局 {ui_layout} 未正确实现',
++		'stream_not_loaded': '流 {stream_mode} 加载失败',
++		'stream_not_supported': '不支持该流',
++		'job_created': '任务 {job_id} 已创建',
++		'job_not_created': '任务 {job_id} 创建失败',
++		'job_submitted': '任务 {job_id} 已提交',
++		'job_not_submitted': '任务 {job_id} 提交失败',
++		'job_all_submitted': '任务已全部提交',
++		'job_all_not_submitted': '任务提交失败',
++		'job_deleted': '任务 {job_id} 已删除',
++		'job_not_deleted': '任务 {job_id} 删除失败',
++		'job_all_deleted': '任务已全部删除',
++		'job_all_not_deleted': '任务删除失败',
++		'job_step_added': '已向任务 {job_id} 添加步骤',
++		'job_step_not_added': '向任务 {job_id} 添加步骤失败',
++		'job_remix_step_added': '已从任务 {job_id} 改编步骤 {step_index}',
++		'job_remix_step_not_added': '从任务 {job_id} 改编步骤 {step_index} 失败',
++		'job_step_inserted': '已向任务 {job_id} 插入步骤 {step_index}',
++		'job_step_not_inserted': '向任务 {job_id} 插入步骤 {step_index} 失败',
++		'job_step_removed': '已从任务 {job_id} 移除步骤 {step_index}',
++		'job_step_not_removed': '从任务 {job_id} 移除步骤 {step_index} 失败',
++		'running_job': '正在运行排队任务 {job_id}',
++		'running_jobs': '正在运行全部排队任务',
++		'retrying_job': '正在重试失败任务 {job_id}',
++		'retrying_jobs': '正在重试全部失败任务',
++		'processing_job_succeeded': '任务 {job_id} 处理成功',
++		'processing_jobs_succeeded': '全部任务处理成功',
++		'processing_job_failed': '任务 {job_id} 处理失败',
++		'processing_jobs_failed': '全部任务处理失败',
++		'processing_step': '正在处理第 {step_current} / {step_total} 步',
++		'validating_hash_succeeded': '{hash_file_name} 哈希校验通过',
++		'validating_hash_failed': '{hash_file_name} 哈希校验失败',
++		'validating_source_succeeded': '{source_file_name} 源文件校验通过',
++		'validating_source_failed': '{source_file_name} 源文件校验失败',
++		'deleting_corrupt_source': '正在删除损坏的源文件 {source_file_name}',
++		'loading_model_succeeded': '模型 {model_name} 加载成功，耗时 {seconds} 秒',
++		'loading_model_failed': '模型 {model_name} 加载失败',
++		'time_ago_now': '刚刚',
++		'time_ago_minutes': '{minutes} 分钟前',
++		'time_ago_hours': '{hours} 小时 {minutes} 分钟前',
++		'time_ago_days': '{days} 天 {hours} 小时 {minutes} 分钟前',
++		'point': '。',
++		'comma': '，',
++		'colon': '：',
++		'question_mark': '？',
++		'exclamation_mark': '！',
++		'processors':
++		{
++			'face_swapper': '换脸',
++			'age_modifier': '年龄调整',
++			'background_remover': '背景移除',
++			'deep_swapper': '预置换脸',
++			'expression_restorer': '表情恢复',
++			'face_debugger': '人脸调试',
++			'face_editor': '人脸编辑',
++			'face_enhancer': '人脸增强',
++			'frame_colorizer': '画面上色',
++			'frame_enhancer': '画面增强',
++			'lip_syncer': '口型同步'
++		},
++		'choices':
++		{
++			'many': '全部（多模型）',
++			'retinaface': 'RetinaFace', 'scrfd': 'SCRFD', 'yolo_face': 'YOLO Face', 'yunet': 'YuNet',
++			'2dfan4': '2DFAN4', 'hrffa': 'HRFFA', 'peppa_wutz': 'Peppa Wutz',
++			'xseg_1': 'XSeg 通用', 'xseg_2': 'XSeg 精细', 'xseg_3': 'XSeg 人像',
++			'bisenet_resnet_18': 'BiseNet ResNet-18（轻量）', 'bisenet_resnet_34': 'BiseNet ResNet-34（精细）',
++			'one': '单人', 'reference': '参考人脸',
++			'left-right': '从左到右', 'right-left': '从右到左', 'top-bottom': '从上到下', 'bottom-top': '从下到上',
++			'small-large': '从小到大', 'large-small': '从大到小', 'best-worst': '从清晰到模糊', 'worst-best': '从模糊到清晰',
++			'none': '不限', 'auto': '自动识别', 'female': '女性', 'male': '男性',
++			'white': '白人', 'black': '黑人', 'latino': '拉美裔', 'asian': '亚裔', 'indian': '印度裔', 'arabic': '阿拉伯裔',
++			'box': '方框遮罩', 'occlusion': '遮挡遮罩', 'area': '大区遮罩', 'region': '部位遮罩',
++			'upper-face': '上半脸', 'lower-face': '下半脸', 'mouth': '嘴部',
++			'skin': '皮肤', 'left-eyebrow': '左眉', 'right-eyebrow': '右眉', 'left-eye': '左眼', 'right-eye': '右眼',
++			'glasses': '眼镜', 'nose': '鼻子', 'upper-lip': '上唇', 'lower-lip': '下唇',
++			'bounding-box': '人脸边框', 'face-landmark-5': '5 点关键点', 'face-landmark-5/68': '5 点 + 68 点关键点',
++			'face-landmark-68': '68 点关键点', 'face-landmark-68/5': '68 点 + 5 点关键点', 'face-mask': '人脸遮罩',
++			'strict': '严格（优先省显存）', 'moderate': '适中（均衡）', 'tolerant': '宽松（优先速度）',
++			'disk': '磁盘（省内存）', 'memory': '内存（更快）',
++			'error': '仅错误', 'warn': '警告及以上', 'info': '信息及以上', 'debug': '调试（全部）',
++			'instant_runner': '即时处理', 'job_runner': '任务运行', 'job_manager': '任务管理',
++			'draft': '草稿', 'queued': '排队中', 'running': '进行中', 'failed': '失败', 'completed': '已完成',
++			'job-run': '运行选中任务', 'job-run-all': '运行全部任务', 'job-retry': '重试选中任务', 'job-retry-all': '重试全部失败任务',
++			'job-create': '新建任务', 'job-submit': '提交任务', 'job-delete': '删除任务', 'job-add-step': '添加步骤',
++			'job-remix-step': '复用步骤', 'job-insert-step': '插入步骤', 'job-remove-step': '移除步骤',
++			'default': '默认（整体预览）', 'frame-by-frame': '逐帧对比', 'face-by-face': '逐张人脸对比',
++			'warm': '预热后测速', 'cold': '冷启动测速',
++			'directml': 'DirectML（AMD 显卡加速）', 'cpu': 'CPU（纯处理器）', 'cuda': 'CUDA（NVIDIA 加速）',
++			'github': 'GitHub 官方源', 'huggingface': 'HuggingFace 源',
++			'ultrafast': '极快（质量最低）', 'superfast': '很快', 'veryfast': '非常快', 'faster': '更快', 'fast': '快',
++			'medium': '均衡（推荐）', 'slow': '慢', 'slower': '更慢', 'veryslow': '最慢（质量最高）',
++			'libx264': 'H.264（兼容性最好）', 'libx264rgb': 'H.264 RGB（无色度压缩）', 'libx265': 'H.265 / HEVC（体积更小）',
++			'libvpx-vp9': 'VP9（网络视频）', 'h264_amf': 'H.264（AMD 硬件加速）', 'h264_nvenc': 'H.264（NVIDIA 硬件加速）',
++			'hevc_nvenc': 'H.265（NVIDIA 硬件加速）', 'h264_qsv': 'H.264（Intel 硬件加速）',
++			'hevc_amf': 'H.265（AMD 硬件加速）', 'hevc_qsv': 'H.265（Intel 硬件加速）', 'rawvideo': '原始视频（不压缩）',
++			'flac': 'FLAC（无损）', 'aac': 'AAC（通用）', 'libmp3lame': 'MP3（通用）', 'libopus': 'Opus（语音优化）',
++			'libvorbis': 'Vorbis', 'pcm_s16le': 'PCM 16 位（无损）', 'pcm_s32le': 'PCM 32 位（无损）',
++			'inline': '内嵌显示', 'udp': 'UDP 推流', 'v4l2': 'V4L2 设备',
++			'alphaface_256': 'AlphaFace', 'blendswap_256': 'BlendSwap（融合自然）',
++			'ghost_1_256': 'Ghost 1（基础）', 'ghost_2_256': 'Ghost 2（均衡）', 'ghost_3_256': 'Ghost 3（精细）',
++			'hififace_unofficial_256': 'HiFiFace（非官方版）',
++			'hyperswap_1a_256': 'HyperSwap 1a（默认，推荐）', 'hyperswap_1b_256': 'HyperSwap 1b（备选）', 'hyperswap_1c_256': 'HyperSwap 1c（备选）',
++			'inswapper_128': 'InsWapper（经典快速）', 'inswapper_128_fp16': 'InsWapper FP16（更快，可能黑图）',
++			'simswap_256': 'SimSwap', 'simswap_unofficial_512': 'SimSwap 512（非官方版）', 'uniface_256': 'UniFace',
++			'codeformer': 'CodeFormer（细节最自然）', 'gfpgan_1.2': 'GFPGAN 1.2（老版本）', 'gfpgan_1.3': 'GFPGAN 1.3（老版本）',
++			'gfpgan_1.4': 'GFPGAN 1.4（速度快）', 'gpen_bfr_256': 'GPEN 256（低清图）', 'gpen_bfr_512': 'GPEN 512（标清图）',
++			'gpen_bfr_1024': 'GPEN 1024（高清图）', 'gpen_bfr_2048': 'GPEN 2048（超清图，慢）', 'restoreformer_plus_plus': 'RestoreFormer++（效果强）',
++			'clear_reality_x4': 'ClearReality 4倍', 'face_dat_x4': 'FaceDAT 4倍（人脸优化）', 'nomos8k_sc_x4': 'NOMOS 8K 4倍',
++			'real_esrgan_x2': 'Real-ESRGAN 2倍', 'real_esrgan_x2_fp16': 'Real-ESRGAN 2倍 FP16（更快）',
++			'real_esrgan_x4': 'Real-ESRGAN 4倍（推荐）', 'real_esrgan_x4_fp16': 'Real-ESRGAN 4倍 FP16（更快）',
++			'real_esrgan_x8': 'Real-ESRGAN 8倍（慢）', 'real_esrgan_x8_fp16': 'Real-ESRGAN 8倍 FP16',
++			'real_hatgan_x4': 'Real-HATGAN 4倍', 'real_web_photo_x4': '网页图片优化 4倍', 'realistic_rescaler_x4': 'Realistic Rescaler 4倍',
++			'remacri_x4': 'Remacri 4倍（锐化强）', 'siax_x4': 'SiaX 4倍', 'span_kendata_x4': 'SPAN 4倍',
++			'swin2_sr_x4': 'Swin2 SR 4倍', 'tghq_face_x8': 'TGHQ 人脸 8倍', 'ultra_sharp_x4': 'UltraSharp 4倍', 'ultra_sharp_2_x4': 'UltraSharp 2 代 4倍',
++			'ddcolor': 'DDColor（色彩准确）', 'ddcolor_artistic': 'DDColor 艺术风格', 'deoldify': 'DeOldify（写实）',
++			'deoldify_artistic': 'DeOldify 艺术风格', 'deoldify_stable': 'DeOldify 稳定版',
++			'ben_2': 'BEN 2（通用）', 'birefnet_general': 'BiRefNet 通用（推荐）', 'birefnet_portrait': 'BiRefNet 人像',
++			'corridor_key_1024': 'Corridor Key 1024', 'corridor_key_2048': 'Corridor Key 2048（精细，慢）',
++			'isnet_general': 'ISNet 通用', 'modnet': 'MODNet（人像）', 'ormbg': 'ORMBG',
++			'rmbg_1.4': 'RMBG 1.4（老版本）', 'rmbg_2.0': 'RMBG 2.0（推荐）', 'silueta': 'Silueta',
++			'u2net_cloth': 'U2Net 衣物', 'u2net_general': 'U2Net 通用', 'u2net_human': 'U2Net 人像', 'u2netp': 'U2NetP（最快）',
++			'edtalk_256': 'EDTalk（效果最好）', 'wav2lip_96': 'Wav2Lip 96（快速）', 'wav2lip_gan_96': 'Wav2Lip GAN 96（清晰）',
++			'kim_vocal_1': 'Kim Vocal 1（通用人声）', 'kim_vocal_2': 'Kim Vocal 2（更强）', 'uvr_mdxnet': 'UVR MDX-Net（分离伴奏）',
++			'live_portrait': 'LivePortrait',
++			'fran': 'FRAN（年龄跨度大）', 'styleganex_age': 'StyleGAN-XE（细节自然）',
++			'adam_levine': '亚当·莱文', 'adrianne_palicki': '安德里亚·帕丽奇', 'agnetha_falskog': '阿格妮莎·法斯克约',
++			'alan_ritchson': '艾伦·里奇森', 'alexandra_daddario': '亚历珊德拉·达达里奥', 'alexei_navalny': '阿列克谢·纳瓦利内',
++			'alica_schmidt': '阿里卡·施密特', 'alicia_vikander': '艾丽西亚·维坎德', 'alison_brie': '艾莉森·布里',
++			'amber_heard': '艾梅柏·希尔德', 'amber_midthunder': '安珀·米德桑德', 'andras_arato': '安德拉什·阿拉托（Hide the Pain Harold）',
++			'andrew_tate': '安德鲁·泰特', 'angelica_trae': '安吉丽卡·特雷', 'angelina_jolie': '安吉丽娜·朱莉',
++			'anne_hathaway': '安妮·海瑟薇', 'anya_chalotra': '安雅·查特拉', 'arnold_schwarzenegger': '阿诺·施瓦辛格',
++			'ashley_alexiss': '阿什莉·阿历克西斯', 'aubrey_plaza': '奥布瑞·普拉扎', 'benjamin_affleck': '本·阿弗莱克',
++			'benjamin_stiller': '本·斯蒂勒', 'billie_eilish': '比莉·艾利什', 'bradley_pitt': '布拉德·皮特',
++			'bridget_regan': '布丽姬·雷根', 'brie_larson': '布丽·拉尔森', 'bruce_campbell': '布鲁斯·坎贝尔',
++			'bryan_cranston': '布莱恩·科兰斯顿', 'cara_delevingne': '卡拉·迪瓦伊', 'carolin_kebekus': '卡罗琳·凯贝库斯',
++			'catherine_blanchett': '凯特·布兰切特', 'chelsea_clinton': '切尔西·克林顿', 'christian_bale': '克里斯蒂安·贝尔',
++			'christoph_waltz': '克里斯托弗·瓦尔兹', 'christopher_hemsworth': '克里斯·海姆斯沃斯', 'cillian_murphy': '希里安·墨菲',
++			'claire_boucher': '克莱尔·布歇（Grimes）', 'cobie_smulders': '科比·斯迈德斯', 'corinna_kopf': '科琳娜·科普夫',
++			'deborah_woll': '黛博拉·安·沃尔', 'dilraba_dilmurat': '迪丽热巴', 'dua_lipa': '杜阿·利帕',
++			'dwayne_johnson': '道恩·强森', 'edward_norton': '爱德华·诺顿', 'elisabeth_shue': '伊丽莎白·苏',
++			'elizabeth_olsen': '伊丽莎白·奥尔森', 'ella_freya': '艾拉·弗雷亚', 'elon_musk': '埃隆·马斯克',
++			'emilia_clarke': '艾米莉亚·克拉克', 'emily_blunt': '艾米莉·布朗特', 'emma_myers': '艾玛·迈尔斯',
++			'emma_roberts': '艾玛·罗伯茨', 'emma_stone': '艾玛·斯通', 'emma_watson': '艾玛·沃特森',
++			'erin_moriarty': '艾琳·莫里亚蒂', 'eva_green': '伊娃·格林', 'evie_pickerill': '伊薇·皮克里尔',
++			'ewan_mcgregor': '伊万·麦克格雷格', 'florence_pugh': '弗洛伦斯·皮尤', 'freya_allan': '芙蕾雅·阿伦',
++			'gary_cole': '加里·科尔', 'gigi_hadid': '吉吉·哈迪德', 'hailee_steinfeld': '海莉·斯坦菲尔德',
++			'harrison_ford': '哈里森·福特', 'hayden_christensen': '海登·克里斯滕森', 'heath_ledger': '希斯·莱杰',
++			'henry_cavill': '亨利·卡维尔', 'hilary_duff': '希拉里·达芙', 'hillary_clinton': '希拉里·克林顿',
++			'hugh_jackman': '休·杰克曼', 'idris_elba': '伊德里斯·艾尔巴', 'ivanka_trump': '伊万卡·特朗普',
++			'jack_nicholson': '杰克·尼科尔森', 'jackie_chan': '成龙', 'james_carrey': '金·凯瑞',
++			'james_mcavoy': '詹姆斯·麦卡沃伊', 'james_varney': '詹姆斯·瓦尼', 'jason_momoa': '杰森·莫玛',
++			'jason_statham': '杰森·斯坦森', 'jenna_fischer': '珍娜·费舍尔', 'jennifer_connelly': '詹妮弗·康纳利',
++			'jessica_alba': '杰西卡·阿尔芭', 'jessica_biel': '杰西卡·贝尔', 'jimmy_donaldson': '吉米·唐纳森（MrBeast）',
++			'john_cena': '约翰·塞纳', 'jordan_peterson': '乔丹·彼得森', 'kang_hyewon': '姜惠元',
++			'karl_urban': '卡尔·厄本', 'kate_beckinsale': '凯特·贝金赛尔', 'keanu_reeves': '基努·里维斯',
++			'kim_jisoo': '金智秀', 'kim_kardashian': '金·卡戴珊', 'kristen_bell': '克里斯汀·贝尔',
++			'laurence_fishburne': '劳伦斯·菲什伯恩', 'lili_reinhart': '莉莉·莱因哈特', 'lize_dzjabrailova': '莉泽·兹拉布拉洛娃',
++			'lucy_liu': '刘玉玲', 'luke_evans': '卢克·伊万斯', 'maddie_mead': '玛迪·米德',
++			'mads_mikkelsen': '麦斯·米科尔森', 'margaret_qualley': '玛格丽特·库里', 'margot_robbie': '玛格特·罗比',
++			'mary_winstead': '玛丽·温斯特德', 'megan_fox': '梅根·福克斯', 'meghan_markle': '梅根·马克尔',
++			'melina_juergens': '梅琳娜·尤尔根斯', 'mica_suarez': '米卡·苏亚雷斯', 'michael_fassbender': '迈克尔·法斯宾德',
++			'michael_fox': '迈克尔·J·福克斯', 'millie_bobby_brown': '米莉·波比·布朗', 'morgan_freeman': '摩根·弗里曼',
++			'natalie_dormer': '娜塔莉·多默尔', 'natalie_portman': '娜塔莉·波特曼', 'nicki_minaj': '妮琪·米娜',
++			'nicolas_coppola': '尼古拉斯·凯奇', 'nicole_turnbull': '妮可·特恩布尔', 'olivia_wilde': '奥利维亚·王尔德',
++			'patrick_stewart': '帕特里克·斯图尔特', 'rachel_weisz': '蕾切尔·薇姿', 'rebecca_ferguson': '丽贝卡·弗格森',
++			'robert_downey': '小罗伯特·唐尼', 'rowan_atkinson': '罗温·艾金森（憨豆）', 'ryan_reynolds': '瑞安·雷诺兹',
++			'scarlett_johansson': '斯嘉丽·约翰逊', 'seth_macfarlane': '塞思·麦克法兰', 'shailene_woodley': '谢琳·伍德蕾',
++			'shannen_doherty': '莎侬·多赫蒂', 'shay_mitchell': '谢伊·米切尔', 'shraddha_kapoor': '施拉达·卡普尔',
++			'sidney_sweeney': '西德尼·斯威尼', 'sophie_turner': '苏菲·特纳', 'sylvester_stallone': '西尔维斯特·史泰龙',
++			'taylor_swift': '泰勒·斯威夫特', 'thomas_cruise': '汤姆·克鲁斯', 'thomas_hanks': '汤姆·汉克斯',
++			'thomas_holland': '汤姆·赫兰德', 'vin_diesel': '范·迪塞尔', 'vladimir_putin': '弗拉基米尔·普京',
++			'william_murray': '比尔·默里', 'winona_ryder': '薇诺娜·瑞德', 'yu_jimin': '于吉敏',
++			'zoe_saldana': '佐伊·索尔达娜'
++		},
++		'help':
++		{
++			'config_path': '选择用于覆盖默认值的配置文件',
++			'temp_path': '指定临时资源的存放目录',
++			'jobs_path': '指定任务的存放目录',
++			'source_paths': '选择图像或音频路径',
++			'target_path': '选择图像或视频路径',
++			'output_path': '在目录中指定输出的图像或视频',
++			'source_pattern': '选择图像或音频的匹配模式',
++			'target_pattern': '选择图像或视频的匹配模式',
++			'output_pattern': '指定图像或视频的匹配模式',
++			'face_detector_model': '选择用于检测人脸的模型',
++			'face_detector_size': '指定送入人脸检测器的画面尺寸',
++			'face_detector_margin': '为画面应用上、右、下、左留边',
++			'face_detector_angles': '指定检测人脸前旋转画面的角度',
++			'face_detector_score': '按置信度分数过滤检测到的人脸',
++			'face_landmarker_model': '选择用于检测人脸关键点的模型',
++			'face_landmarker_score': '按置信度分数过滤人脸关键点',
++			'face_selector_mode': '使用基于参考的追踪或简单匹配',
++			'face_selector_order': '指定检测到的人脸顺序',
++			'face_selector_age_start': '按起始年龄过滤检测到的人脸',
++			'face_selector_age_end': '按结束年龄过滤检测到的人脸',
++			'face_selector_gender': '按性别过滤检测到的人脸',
++			'face_selector_race': '按人种过滤检测到的人脸',
++			'reference_face_position': '指定用于创建参考人脸的位置',
++			'reference_face_distance': '指定参考人脸与目标人脸的相似度',
++			'reference_frame_number': '指定用于创建参考人脸的帧',
++			'face_tracker_score': '指定人脸追踪的匹配阈值',
++			'face_occluder_model': '选择用于检测面部遮挡的模型',
++			'face_parser_model': '选择用于划分面部区域的模型',
++			'face_mask_types': '可同时启用多种遮罩方式（可选：{choices}）',
++			'face_mask_areas': '选择要遮罩的大区域，如上半脸、下半脸（可选：{choices}）',
++			'face_mask_regions': '选择要遮罩的精细部位，如眼睛、嘴唇（可选：{choices}）',
++			'face_mask_blur': '控制遮罩边缘的羽化程度',
++			'face_mask_padding': '让遮罩向上下左右各扩展一段距离',
++			'voice_extractor_model': '选择用于提取人声的模型',
++			'trim_frame_start': '指定目标视频的起始帧',
++			'trim_frame_end': '指定目标视频的结束帧',
++			'temp_frame_format': '指定临时画面格式',
++			'temp_pixel_format': '指定临时像素格式',
++			'target_frame_amount': '指定实际送入处理的帧数上限',
++			'output_image_quality': '指定图像质量，对应图像压缩率',
++			'output_image_scale': '基于目标图像指定图像缩放比例',
++			'output_audio_encoder': '指定音频使用的编码器',
++			'output_audio_quality': '指定音频质量，对应音频压缩率',
++			'output_audio_volume': '基于目标视频指定音频音量',
++			'output_video_encoder': '指定视频使用的编码器',
++			'output_video_preset': '在视频处理速度与文件大小之间取得平衡',
++			'output_video_quality': '指定视频质量，对应视频压缩率',
++			'output_video_scale': '基于目标视频指定视频缩放比例',
++			'output_video_fps': '基于目标视频指定视频帧率',
++			'workflow_mode': '自动判断或手动指定处理方式',
++			'workflow_strategy': '临时帧放在内存还是磁盘上处理',
++			'processors': '加载一个或多个处理器（可选：{choices}, ...）',
++			'background-remover-model': '选择用于移除背景的模型',
++			'background-remover-color': '设置背景的红、绿、蓝与透明度值',
++			'open_browser': '程序就绪后打开浏览器',
++			'ui_layouts': '启动一个或多个界面布局（可选：{choices}, ...）',
++			'ui_workflow': '选择界面运行模式',
++			'download_providers': '使用不同的下载源（可选：{choices}, ...）',
++			'download_scope': '指定下载范围',
++			'benchmark_mode': '选择基准测试模式',
++			'benchmark_resolutions': '选择基准测试的分辨率（可选：{choices}, ...）',
++			'benchmark_cycle_count': '指定每次基准测试的循环次数',
++			'execution_device_ids': '指定用于处理的设备',
++			'execution_providers': '使用不同的推理后端（可选：{choices}, ...）',
++			'execution_thread_count': '指定处理时的并行线程数',
++			'video_memory_strategy': '在处理速度与显存占用之间取得平衡',
++			'log_level': '调整终端显示的消息级别',
++			'halt_on_error': '出错时立即停止程序',
++			'run': '运行程序',
++			'headless_run': '以无界面模式运行程序',
++			'batch_run': '以批处理模式运行程序',
++			'force_download': '强制自动下载并退出',
++			'benchmark': '对程序进行基准测试',
++			'job_id': '指定任务 id',
++			'job_status': '指定任务状态',
++			'step_index': '指定步骤序号',
++			'job_list': '按状态列出任务',
++			'job_create': '创建一个草稿任务',
++			'job_submit': '提交草稿任务使其成为排队任务',
++			'job_submit_all': '提交所有草稿任务使其成为排队任务',
++			'job_delete': '删除草稿、排队、失败或已完成的任务',
++			'job_delete_all': '删除所有草稿、排队、失败和已完成的任务',
++			'job_add_step': '向草稿任务添加步骤',
++			'job_remix_step': '复用草稿任务中的已有步骤',
++			'job_insert_step': '向草稿任务插入步骤',
++			'job_remove_step': '从草稿任务移除步骤',
++			'job_run': '运行一个排队任务',
++			'job_run_all': '运行所有排队任务',
++			'job_retry': '重试一个失败任务',
++			'job_retry_all': '重试所有失败任务'
++		},
++		'about':
++		{
++			'fund': '资助 AI 工作站',
++			'subscribe': '成为会员',
++			'join': '加入我们的社区'
++		},
++		'uis':
++		{
++			'apply_button': '应用',
++			'benchmark_mode_dropdown': '基准测试模式',
++			'benchmark_cycle_count_slider': '基准测试循环次数',
++			'benchmark_resolutions_checkbox_group': '基准测试分辨率',
++			'clear_button': '清除',
++			'download_providers_checkbox_group': '下载源',
++			'execution_providers_checkbox_group': '推理后端',
++			'workflow_strategy_dropdown': '工作流策略',
++			'execution_thread_count_slider': '处理线程数',
++			'face_detector_angles_checkbox_group': '人脸检测角度',
++			'face_detector_model_dropdown': '人脸检测模型',
++			'face_detector_margin_slider': '人脸检测留边',
++			'face_detector_score_slider': '人脸检测阈值',
++			'face_detector_size_dropdown': '人脸检测尺寸',
++			'face_landmarker_model_dropdown': '人脸关键点模型',
++			'face_landmarker_score_slider': '人脸关键点阈值',
++			'face_mask_blur_slider': '遮罩模糊',
++			'face_mask_padding_bottom_slider': '遮罩下内边距',
++			'face_mask_padding_left_slider': '遮罩左内边距',
++			'face_mask_padding_right_slider': '遮罩右内边距',
++			'face_mask_padding_top_slider': '遮罩上内边距',
++			'face_mask_areas_checkbox_group': '遮罩大区',
++			'face_mask_regions_checkbox_group': '遮罩部位',
++			'face_mask_types_checkbox_group': '遮罩类型',
++			'face_selector_age_range_slider': '按年龄筛选',
++			'face_selector_gender_dropdown': '按性别筛选',
++			'face_selector_mode_dropdown': '筛选模式',
++			'face_selector_order_dropdown': '筛选排序',
++			'face_selector_race_dropdown': '按人种筛选',
++			'face_tracker_score_slider': '人脸追踪阈值',
++			'face_occluder_model_dropdown': '遮挡遮罩模型',
++			'face_parser_model_dropdown': '面部解析模型',
++			'voice_extractor_model_dropdown': '人声提取模型',
++			'job_list_status_checkbox_group': '任务状态',
++			'job_manager_job_action_dropdown': '任务操作',
++			'job_manager_job_id_dropdown': '任务 ID',
++			'job_manager_step_index_dropdown': '步骤序号',
++			'job_runner_job_action_dropdown': '任务操作',
++			'job_runner_job_id_dropdown': '任务 ID',
++			'log_level_dropdown': '日志级别',
++			'output_audio_encoder_dropdown': '输出音频编码器',
++			'output_audio_quality_slider': '输出音频质量',
++			'output_audio_volume_slider': '输出音频音量',
++			'output_image_or_video': '输出',
++			'output_image_quality_slider': '输出图像质量',
++			'output_image_scale_slider': '输出图像缩放',
++			'output_path_textbox': '输出路径',
++			'output_video_encoder_dropdown': '输出视频编码器',
++			'output_video_fps_slider': '输出视频帧率',
++			'output_video_preset_dropdown': '视频编码预设',
++			'output_video_quality_slider': '输出视频质量',
++			'output_video_scale_slider': '输出视频缩放',
++			'preview_frame_slider': '预览帧位置',
++			'preview_image': '预览',
++			'preview_mode_dropdown': '预览模式',
++			'preview_resolution_dropdown': '预览分辨率',
++			'processors_checkbox_group': '处理器',
++			'reference_face_distance_slider': '参考人脸相似度',
++			'reference_face_gallery': '参考人脸',
++			'refresh_button': '刷新',
++			'source_file': '源文件',
++			'start_button': '开始',
++			'stop_button': '停止',
++			'target_file': '目标文件',
++			'temp_frame_format_dropdown': '临时帧格式',
++			'terminal_textbox': '终端',
++			'trim_frame_slider': '裁剪范围',
++			'ui_workflow': '界面模式',
++			'video_memory_strategy_dropdown': '显存策略',
++			'webcam_fps_slider': '摄像头帧率',
++			'webcam_image': '摄像头',
++			'webcam_device_id_dropdown': '摄像头设备 ID',
++			'webcam_mode_radio': '摄像头模式',
++			'webcam_resolution_dropdown': '摄像头分辨率'
++		}
+ 	}
+ }
+diff --git a/facefusion/processors/modules/age_modifier/locales.py b/facefusion/processors/modules/age_modifier/locales.py
+index c72bbbb..386dc8a 100644
+--- a/facefusion/processors/modules/age_modifier/locales.py
++++ b/facefusion/processors/modules/age_modifier/locales.py
+@@ -11,8 +11,21 @@ LOCALES : Locales =\
+ 		},
+ 		'uis':
+ 		{
+-			'direction_slider': 'AGE MODIFIER DIRECTION',
+-			'model_dropdown': 'AGE MODIFIER MODEL'
++			'direction_slider': '年龄调整方向',
++			'model_dropdown': '年龄调整模型'
++		}
++	},
++	'zh':
++	{
++		'help':
++		{
++			'model': '选择用于改变人脸年龄的模型',
++			'direction': '指定年龄调整的方向'
++		},
++		'uis':
++		{
++			'direction_slider': '年龄调整方向',
++			'model_dropdown': '年龄调整模型'
+ 		}
+ 	}
+ }
+diff --git a/facefusion/processors/modules/background_remover/locales.py b/facefusion/processors/modules/background_remover/locales.py
+index 9967932..3fce1a7 100644
+--- a/facefusion/processors/modules/background_remover/locales.py
++++ b/facefusion/processors/modules/background_remover/locales.py
+@@ -20,7 +20,28 @@ LOCALES : Locales =\
+ 			'despill_color_red_number': 'DESPILL COLOR RED',
+ 			'despill_color_green_number': 'DESPILL COLOR GREEN',
+ 			'despill_color_blue_number': 'DESPILL COLOR BLUE',
+-			'despill_color_alpha_number': 'DESPILL COLOR ALPHA'
++			'despill_color_alpha_number': '去溢色透明度'
++		}
++	},
++	'zh':
++	{
++		'help':
++		{
++			'model': '选择用于移除背景的模型',
++			'fill_color': '为背景设置红、绿、蓝与透明度值',
++			'despill_color': '从前景中去除红、绿、蓝与透明度值'
++		},
++		'uis':
++		{
++			'model_dropdown': '背景移除模型',
++			'fill_color_red_number': '填充色 红',
++			'fill_color_green_number': '填充色 绿',
++			'fill_color_blue_number': '填充色 蓝',
++			'fill_color_alpha_number': '填充色 透明度',
++			'despill_color_red_number': '去溢色 红',
++			'despill_color_green_number': '去溢色 绿',
++			'despill_color_blue_number': '去溢色 蓝',
++			'despill_color_alpha_number': '去溢色 透明度'
+ 		}
+ 	}
+ }
+diff --git a/facefusion/processors/modules/deep_swapper/locales.py b/facefusion/processors/modules/deep_swapper/locales.py
+index 4c42c95..ca24295 100644
+--- a/facefusion/processors/modules/deep_swapper/locales.py
++++ b/facefusion/processors/modules/deep_swapper/locales.py
+@@ -12,7 +12,20 @@ LOCALES : Locales =\
+ 		'uis':
+ 		{
+ 			'model_dropdown': 'DEEP SWAPPER MODEL',
+-			'morph_slider': 'DEEP SWAPPER MORPH'
++			'morph_slider': '深度换脸 形变'
++		}
++	},
++	'zh':
++	{
++		'help':
++		{
++			'model': '选择用于换脸的模型',
++			'morph': '在源人脸与目标人脸之间形变'
++		},
++		'uis':
++		{
++			'model_dropdown': '深度换脸模型',
++			'morph_slider': '深度换脸 形变'
+ 		}
+ 	}
+ }
+diff --git a/facefusion/processors/modules/expression_restorer/locales.py b/facefusion/processors/modules/expression_restorer/locales.py
+index 2e1c6da..c9c78d5 100644
+--- a/facefusion/processors/modules/expression_restorer/locales.py
++++ b/facefusion/processors/modules/expression_restorer/locales.py
+@@ -14,7 +14,22 @@ LOCALES : Locales =\
+ 		{
+ 			'model_dropdown': 'EXPRESSION RESTORER MODEL',
+ 			'factor_slider': 'EXPRESSION RESTORER FACTOR',
+-			'areas_checkbox_group': 'EXPRESSION RESTORER AREAS'
++			'areas_checkbox_group': '表情恢复区域'
++		}
++	},
++	'zh':
++	{
++		'help':
++		{
++			'model': '选择用于恢复表情的模型',
++			'factor': '从目标人脸恢复表情的强度',
++			'areas': '选择用于表情区域的项目（可选：{choices}）'
++		},
++		'uis':
++		{
++			'model_dropdown': '表情恢复模型',
++			'factor_slider': '表情恢复 强度',
++			'areas_checkbox_group': '表情恢复区域'
+ 		}
+ 	}
+ }
+diff --git a/facefusion/processors/modules/face_debugger/locales.py b/facefusion/processors/modules/face_debugger/locales.py
+index db33a82..960f055 100644
+--- a/facefusion/processors/modules/face_debugger/locales.py
++++ b/facefusion/processors/modules/face_debugger/locales.py
+@@ -10,7 +10,18 @@ LOCALES : Locales =\
+ 		},
+ 		'uis':
+ 		{
+-			'items_checkbox_group': 'FACE DEBUGGER ITEMS'
++			'items_checkbox_group': '人脸调试项'
++		}
++	},
++	'zh':
++	{
++		'help':
++		{
++			'items': '加载一个或多个处理器（可选：{choices}）'
++		},
++		'uis':
++		{
++			'items_checkbox_group': '人脸调试项'
+ 		}
+ 	}
+ }
+diff --git a/facefusion/processors/modules/face_editor/locales.py b/facefusion/processors/modules/face_editor/locales.py
+index c400c23..5515b55 100644
+--- a/facefusion/processors/modules/face_editor/locales.py
++++ b/facefusion/processors/modules/face_editor/locales.py
+@@ -38,7 +38,46 @@ LOCALES : Locales =\
+ 			'mouth_position_vertical_slider': 'FACE EDITOR MOUTH POSITION VERTICAL',
+ 			'mouth_pout_slider': 'FACE EDITOR MOUTH POUT',
+ 			'mouth_purse_slider': 'FACE EDITOR MOUTH PURSE',
+-			'mouth_smile_slider': 'FACE EDITOR MOUTH SMILE'
++			'mouth_smile_slider': '人脸编辑 微笑'
++		}
++	},
++	'zh':
++	{
++		'help':
++		{
++			'model': '选择用于编辑人脸的模型',
++			'eyebrow_direction': '指定眉毛方向',
++			'eye_gaze_horizontal': '指定眼睛水平视线',
++			'eye_gaze_vertical': '指定眼睛垂直视线',
++			'eye_open_ratio': '指定眼睛睁开比例',
++			'lip_open_ratio': '指定嘴唇张开比例',
++			'mouth_grim': '指定抿嘴程度',
++			'mouth_pout': '指定噘嘴程度',
++			'mouth_purse': '指定努嘴程度',
++			'mouth_smile': '指定微笑程度',
++			'mouth_position_horizontal': '指定嘴部水平位置',
++			'mouth_position_vertical': '指定嘴部垂直位置',
++			'head_pitch': '指定头部俯仰角',
++			'head_yaw': '指定头部偏航角',
++			'head_roll': '指定头部翻滚角'
++		},
++		'uis':
++		{
++			'eyebrow_direction_slider': '人脸编辑 眉毛方向',
++			'eye_gaze_horizontal_slider': '人脸编辑 视线水平',
++			'eye_gaze_vertical_slider': '人脸编辑 视线垂直',
++			'eye_open_ratio_slider': '人脸编辑 眼睛睁开比例',
++			'head_pitch_slider': '人脸编辑 头部俯仰',
++			'head_roll_slider': '人脸编辑 头部翻滚',
++			'head_yaw_slider': '人脸编辑 头部偏航',
++			'lip_open_ratio_slider': '人脸编辑 嘴唇张开比例',
++			'model_dropdown': '人脸编辑模型',
++			'mouth_grim_slider': '人脸编辑 抿嘴',
++			'mouth_position_horizontal_slider': '人脸编辑 嘴部水平位置',
++			'mouth_position_vertical_slider': '人脸编辑 嘴部垂直位置',
++			'mouth_pout_slider': '人脸编辑 噘嘴',
++			'mouth_purse_slider': '人脸编辑 努嘴',
++			'mouth_smile_slider': '人脸编辑 微笑'
+ 		}
+ 	}
+ }
+diff --git a/facefusion/processors/modules/face_enhancer/locales.py b/facefusion/processors/modules/face_enhancer/locales.py
+index 5cd314d..1dd76aa 100644
+--- a/facefusion/processors/modules/face_enhancer/locales.py
++++ b/facefusion/processors/modules/face_enhancer/locales.py
+@@ -14,7 +14,22 @@ LOCALES : Locales =\
+ 		{
+ 			'blend_slider': 'FACE ENHANCER BLEND',
+ 			'model_dropdown': 'FACE ENHANCER MODEL',
+-			'weight_slider': 'FACE ENHANCER WEIGHT'
++			'weight_slider': '人脸增强 权重'
++		}
++	},
++	'zh':
++	{
++		'help':
++		{
++			'model': '选择用于增强人脸的模型',
++			'blend': '将增强结果与原人脸混合',
++			'weight': '指定施加到人脸的权重程度'
++		},
++		'uis':
++		{
++			'blend_slider': '人脸增强 混合',
++			'model_dropdown': '人脸增强模型',
++			'weight_slider': '人脸增强 权重'
+ 		}
+ 	}
+ }
+diff --git a/facefusion/processors/modules/face_swapper/locales.py b/facefusion/processors/modules/face_swapper/locales.py
+index ac48146..039ec17 100644
+--- a/facefusion/processors/modules/face_swapper/locales.py
++++ b/facefusion/processors/modules/face_swapper/locales.py
+@@ -14,7 +14,22 @@ LOCALES : Locales =\
+ 		{
+ 			'model_dropdown': 'FACE SWAPPER MODEL',
+ 			'pixel_boost_dropdown': 'FACE SWAPPER PIXEL BOOST',
+-			'weight_slider': 'FACE SWAPPER WEIGHT'
++			'weight_slider': '换脸 权重'
++		}
++	},
++	'zh':
++	{
++		'help':
++		{
++			'model': '选择用于换脸的模型',
++			'pixel_boost': '选择换脸模型使用的像素增强分辨率',
++			'weight': '指定施加到人脸的权重程度'
++		},
++		'uis':
++		{
++			'model_dropdown': '换脸模型',
++			'pixel_boost_dropdown': '换脸像素增强',
++			'weight_slider': '换脸 权重'
+ 		}
+ 	}
+ }
+diff --git a/facefusion/processors/modules/frame_colorizer/locales.py b/facefusion/processors/modules/frame_colorizer/locales.py
+index 8c43994..42d00a9 100644
+--- a/facefusion/processors/modules/frame_colorizer/locales.py
++++ b/facefusion/processors/modules/frame_colorizer/locales.py
+@@ -14,7 +14,22 @@ LOCALES : Locales =\
+ 		{
+ 			'blend_slider': 'FRAME COLORIZER BLEND',
+ 			'model_dropdown': 'FRAME COLORIZER MODEL',
+-			'size_dropdown': 'FRAME COLORIZER SIZE'
++			'size_dropdown': '画面上色尺寸'
++		}
++	},
++	'zh':
++	{
++		'help':
++		{
++			'model': '选择用于画面上色的模型',
++			'size': '指定送入画面上色器的画面尺寸',
++			'blend': '将上色结果与原画面混合'
++		},
++		'uis':
++		{
++			'blend_slider': '画面上色 混合',
++			'model_dropdown': '画面上色模型',
++			'size_dropdown': '画面上色尺寸'
+ 		}
+ 	}
+ }
+diff --git a/facefusion/processors/modules/frame_enhancer/locales.py b/facefusion/processors/modules/frame_enhancer/locales.py
+index 2df9ff9..b82a139 100644
+--- a/facefusion/processors/modules/frame_enhancer/locales.py
++++ b/facefusion/processors/modules/frame_enhancer/locales.py
+@@ -12,7 +12,20 @@ LOCALES : Locales =\
+ 		'uis':
+ 		{
+ 			'blend_slider': 'FRAME ENHANCER BLEND',
+-			'model_dropdown': 'FRAME ENHANCER MODEL'
++			'model_dropdown': '画面增强模型'
++		}
++	},
++	'zh':
++	{
++		'help':
++		{
++			'model': '选择用于增强画面的模型',
++			'blend': '将增强结果与原画面混合'
++		},
++		'uis':
++		{
++			'blend_slider': '画面增强 混合',
++			'model_dropdown': '画面增强模型'
+ 		}
+ 	}
+ }
+diff --git a/facefusion/processors/modules/lip_syncer/locales.py b/facefusion/processors/modules/lip_syncer/locales.py
+index 62bc259..bdba613 100644
+--- a/facefusion/processors/modules/lip_syncer/locales.py
++++ b/facefusion/processors/modules/lip_syncer/locales.py
+@@ -12,7 +12,20 @@ LOCALES : Locales =\
+ 		'uis':
+ 		{
+ 			'model_dropdown': 'LIP SYNCER MODEL',
+-			'weight_slider': 'LIP SYNCER WEIGHT'
++			'weight_slider': '口型同步 权重'
++		}
++	},
++	'zh':
++	{
++		'help':
++		{
++			'model': '选择用于口型同步的模型',
++			'weight': '指定施加到嘴唇的权重程度'
++		},
++		'uis':
++		{
++			'model_dropdown': '口型同步模型',
++			'weight_slider': '口型同步 权重'
+ 		}
+ 	}
+ }
+diff --git a/facefusion/translator.py b/facefusion/translator.py
+index 9f5fb4f..b929d41 100644
+--- a/facefusion/translator.py
++++ b/facefusion/translator.py
+@@ -1,10 +1,11 @@
+ import importlib
+-from typing import Optional
++import re
++from typing import Any, Dict, List, Optional, Tuple
+ 
+ from facefusion.types import Language, LocalePoolSet, Locales
+ 
+ LOCALE_POOL_SET : LocalePoolSet = {}
+-CURRENT_LANGUAGE : Language = 'en'
++CURRENT_LANGUAGE : Language = 'zh'
+ 
+ 
+ def __autoload__(module_name : str) -> None:
+@@ -33,3 +34,29 @@ def get(notation : str, module_name : str = 'facefusion') -> Optional[str]:
+ 				return current
+ 
+ 	return None
++
++
++def localize_choices(values : List[Any], overrides : Optional[Dict[str, str]] = None) -> List[Tuple[str, Any]]:
++	if CURRENT_LANGUAGE == 'en':
++		return [ (str(value), value) for value in values ]
++
++	if 'facefusion' not in LOCALE_POOL_SET:
++		__autoload__('facefusion')
++
++	choices = LOCALE_POOL_SET.get('facefusion', {}).get(CURRENT_LANGUAGE, {}).get('choices') or {}
++	if overrides:
++		choices = { **choices, **overrides }
++
++	result : List[Tuple[str, Any]] = []
++	for value in values:
++		key = str(value)
++		label = choices.get(key)
++
++		if label is None and '/' in key:
++			base_name = key.rsplit('/', 1)[-1]
++			base_name = re.sub(r'_\d+$', '', base_name)
++			label = choices.get(base_name)
++
++		result.append((label if label else key, value))
++
++	return result
+diff --git a/facefusion/types.py b/facefusion/types.py
+index dcf4ee8..cf54327 100755
+--- a/facefusion/types.py
++++ b/facefusion/types.py
+@@ -60,7 +60,7 @@ FaceSet = TypedDict('FaceSet',
+ FaceStore : TypeAlias = Dict[str, FaceSet]
+ FaceTrack : TypeAlias = Dict[int, Face]
+ 
+-Language = Literal['en']
++Language = Literal['en', 'zh']
+ Locales : TypeAlias = Dict[Language, Dict[str, Any]]
+ LocalePoolSet : TypeAlias = Dict[str, Locales]
+ 
+diff --git a/facefusion/uis/components/age_modifier_options.py b/facefusion/uis/components/age_modifier_options.py
+index 7e4fec9..4f18b80 100755
+--- a/facefusion/uis/components/age_modifier_options.py
++++ b/facefusion/uis/components/age_modifier_options.py
+@@ -20,7 +20,7 @@ def render() -> None:
+ 	has_age_modifier = 'age_modifier' in state_manager.get_item('processors')
+ 	AGE_MODIFIER_MODEL_DROPDOWN = gradio.Dropdown(
+ 		label = translator.get('uis.model_dropdown', 'facefusion.processors.modules.age_modifier'),
+-		choices = age_modifier_choices.age_modifier_models,
++		choices = translator.localize_choices(age_modifier_choices.age_modifier_models),
+ 		value = state_manager.get_item('age_modifier_model'),
+ 		visible = has_age_modifier
+ 	)
+diff --git a/facefusion/uis/components/background_remover_options.py b/facefusion/uis/components/background_remover_options.py
+index 5f2d005..d1565c8 100644
+--- a/facefusion/uis/components/background_remover_options.py
++++ b/facefusion/uis/components/background_remover_options.py
+@@ -41,7 +41,7 @@ def render() -> None:
+ 	background_remover_despill_color = state_manager.get_item('background_remover_despill_color')
+ 	BACKGROUND_REMOVER_MODEL_DROPDOWN = gradio.Dropdown(
+ 		label = translator.get('uis.model_dropdown', 'facefusion.processors.modules.background_remover'),
+-		choices = background_remover_choices.background_remover_models,
++		choices = translator.localize_choices(background_remover_choices.background_remover_models),
+ 		value = state_manager.get_item('background_remover_model'),
+ 		visible = has_background_remover
+ 	)
+diff --git a/facefusion/uis/components/benchmark_options.py b/facefusion/uis/components/benchmark_options.py
+index 58d1ac7..81a17b3 100644
+--- a/facefusion/uis/components/benchmark_options.py
++++ b/facefusion/uis/components/benchmark_options.py
+@@ -19,7 +19,7 @@ def render() -> None:
+ 
+ 	BENCHMARK_MODE_DROPDOWN = gradio.Dropdown(
+ 		label = translator.get('uis.benchmark_mode_dropdown'),
+-		choices = facefusion.choices.benchmark_modes,
++		choices = translator.localize_choices(facefusion.choices.benchmark_modes),
+ 		value = state_manager.get_item('benchmark_mode')
+ 	)
+ 	BENCHMARK_RESOLUTIONS_CHECKBOX_GROUP = gradio.CheckboxGroup(
+diff --git a/facefusion/uis/components/deep_swapper_options.py b/facefusion/uis/components/deep_swapper_options.py
+index 3456e82..c771eb5 100755
+--- a/facefusion/uis/components/deep_swapper_options.py
++++ b/facefusion/uis/components/deep_swapper_options.py
+@@ -20,7 +20,7 @@ def render() -> None:
+ 	has_deep_swapper = 'deep_swapper' in state_manager.get_item('processors')
+ 	DEEP_SWAPPER_MODEL_DROPDOWN = gradio.Dropdown(
+ 		label = translator.get('uis.model_dropdown', 'facefusion.processors.modules.deep_swapper'),
+-		choices = deep_swapper_choices.deep_swapper_models,
++		choices = translator.localize_choices(deep_swapper_choices.deep_swapper_models),
+ 		value = state_manager.get_item('deep_swapper_model'),
+ 		visible = has_deep_swapper
+ 	)
+diff --git a/facefusion/uis/components/download.py b/facefusion/uis/components/download.py
+index feff4ad..853b9cd 100644
+--- a/facefusion/uis/components/download.py
++++ b/facefusion/uis/components/download.py
+@@ -16,7 +16,7 @@ def render() -> None:
+ 
+ 	DOWNLOAD_PROVIDERS_CHECKBOX_GROUP = gradio.CheckboxGroup(
+ 		label = translator.get('uis.download_providers_checkbox_group'),
+-		choices = facefusion.choices.download_providers,
++		choices = translator.localize_choices(facefusion.choices.download_providers),
+ 		value = state_manager.get_item('download_providers')
+ 	)
+ 
+diff --git a/facefusion/uis/components/execution.py b/facefusion/uis/components/execution.py
+index 0327565..40b3a14 100644
+--- a/facefusion/uis/components/execution.py
++++ b/facefusion/uis/components/execution.py
+@@ -16,7 +16,7 @@ def render() -> None:
+ 
+ 	EXECUTION_PROVIDERS_CHECKBOX_GROUP = gradio.CheckboxGroup(
+ 		label = translator.get('uis.execution_providers_checkbox_group'),
+-		choices = get_available_execution_providers(),
++		choices = translator.localize_choices(get_available_execution_providers()),
+ 		value = state_manager.get_item('execution_providers')
+ 	)
+ 
+diff --git a/facefusion/uis/components/expression_restorer_options.py b/facefusion/uis/components/expression_restorer_options.py
+index ddcff5c..3fcbe58 100755
+--- a/facefusion/uis/components/expression_restorer_options.py
++++ b/facefusion/uis/components/expression_restorer_options.py
+@@ -22,7 +22,7 @@ def render() -> None:
+ 	has_expression_restorer = 'expression_restorer' in state_manager.get_item('processors')
+ 	EXPRESSION_RESTORER_MODEL_DROPDOWN = gradio.Dropdown(
+ 		label = translator.get('uis.model_dropdown', 'facefusion.processors.modules.expression_restorer'),
+-		choices = expression_restorer_choices.expression_restorer_models,
++		choices = translator.localize_choices(expression_restorer_choices.expression_restorer_models),
+ 		value = state_manager.get_item('expression_restorer_model'),
+ 		visible = has_expression_restorer
+ 	)
+@@ -36,7 +36,7 @@ def render() -> None:
+ 	)
+ 	EXPRESSION_RESTORER_AREAS_CHECKBOX_GROUP = gradio.CheckboxGroup(
+ 		label = translator.get('uis.areas_checkbox_group', 'facefusion.processors.modules.expression_restorer'),
+-		choices = expression_restorer_choices.expression_restorer_areas,
++		choices = translator.localize_choices(expression_restorer_choices.expression_restorer_areas),
+ 		value = state_manager.get_item('expression_restorer_areas'),
+ 		visible = has_expression_restorer
+ 	)
+diff --git a/facefusion/uis/components/face_debugger_options.py b/facefusion/uis/components/face_debugger_options.py
+index fa20d29..3115098 100755
+--- a/facefusion/uis/components/face_debugger_options.py
++++ b/facefusion/uis/components/face_debugger_options.py
+@@ -16,7 +16,7 @@ def render() -> None:
+ 	has_face_debugger = 'face_debugger' in state_manager.get_item('processors')
+ 	FACE_DEBUGGER_ITEMS_CHECKBOX_GROUP = gradio.CheckboxGroup(
+ 		label = translator.get('uis.items_checkbox_group', 'facefusion.processors.modules.face_debugger'),
+-		choices = face_debugger_choices.face_debugger_items,
++		choices = translator.localize_choices(face_debugger_choices.face_debugger_items),
+ 		value = state_manager.get_item('face_debugger_items'),
+ 		visible = has_face_debugger
+ 	)
+diff --git a/facefusion/uis/components/face_detector.py b/facefusion/uis/components/face_detector.py
+index bb88d5b..028bcc3 100644
+--- a/facefusion/uis/components/face_detector.py
++++ b/facefusion/uis/components/face_detector.py
+@@ -34,7 +34,7 @@ def render() -> None:
+ 	with gradio.Row():
+ 		FACE_DETECTOR_MODEL_DROPDOWN = gradio.Dropdown(
+ 			label = translator.get('uis.face_detector_model_dropdown'),
+-			choices = facefusion.choices.face_detector_models,
++			choices = translator.localize_choices(facefusion.choices.face_detector_models),
+ 			value = state_manager.get_item('face_detector_model')
+ 		)
+ 		FACE_DETECTOR_SIZE_DROPDOWN = gradio.Dropdown(**face_detector_size_dropdown_options)
+diff --git a/facefusion/uis/components/face_editor_options.py b/facefusion/uis/components/face_editor_options.py
+index 59b51f8..a483d85 100755
+--- a/facefusion/uis/components/face_editor_options.py
++++ b/facefusion/uis/components/face_editor_options.py
+@@ -46,7 +46,7 @@ def render() -> None:
+ 	has_face_editor = 'face_editor' in state_manager.get_item('processors')
+ 	FACE_EDITOR_MODEL_DROPDOWN = gradio.Dropdown(
+ 		label = translator.get('uis.model_dropdown', 'facefusion.processors.modules.face_editor'),
+-		choices = face_editor_choices.face_editor_models,
++		choices = translator.localize_choices(face_editor_choices.face_editor_models),
+ 		value = state_manager.get_item('face_editor_model'),
+ 		visible = has_face_editor
+ 	)
+diff --git a/facefusion/uis/components/face_enhancer_options.py b/facefusion/uis/components/face_enhancer_options.py
+index 301897e..af413d4 100755
+--- a/facefusion/uis/components/face_enhancer_options.py
++++ b/facefusion/uis/components/face_enhancer_options.py
+@@ -22,7 +22,7 @@ def render() -> None:
+ 	has_face_enhancer = 'face_enhancer' in state_manager.get_item('processors')
+ 	FACE_ENHANCER_MODEL_DROPDOWN = gradio.Dropdown(
+ 		label = translator.get('uis.model_dropdown', 'facefusion.processors.modules.face_enhancer'),
+-		choices = face_enhancer_choices.face_enhancer_models,
++		choices = translator.localize_choices(face_enhancer_choices.face_enhancer_models),
+ 		value = state_manager.get_item('face_enhancer_model'),
+ 		visible = has_face_enhancer
+ 	)
+diff --git a/facefusion/uis/components/face_landmarker.py b/facefusion/uis/components/face_landmarker.py
+index 56ab373..d3762fb 100644
+--- a/facefusion/uis/components/face_landmarker.py
++++ b/facefusion/uis/components/face_landmarker.py
+@@ -18,7 +18,7 @@ def render() -> None:
+ 
+ 	FACE_LANDMARKER_MODEL_DROPDOWN = gradio.Dropdown(
+ 		label = translator.get('uis.face_landmarker_model_dropdown'),
+-		choices = facefusion.choices.face_landmarker_models,
++		choices = translator.localize_choices(facefusion.choices.face_landmarker_models),
+ 		value = state_manager.get_item('face_landmarker_model')
+ 	)
+ 	FACE_LANDMARKER_SCORE_SLIDER = gradio.Slider(
+diff --git a/facefusion/uis/components/face_masker.py b/facefusion/uis/components/face_masker.py
+index 17be13d..38ab13c 100755
+--- a/facefusion/uis/components/face_masker.py
++++ b/facefusion/uis/components/face_masker.py
+@@ -41,28 +41,28 @@ def render() -> None:
+ 	with gradio.Row():
+ 		FACE_OCCLUDER_MODEL_DROPDOWN = gradio.Dropdown(
+ 			label = translator.get('uis.face_occluder_model_dropdown'),
+-			choices = facefusion.choices.face_occluder_models,
++			choices = translator.localize_choices(facefusion.choices.face_occluder_models),
+ 			value = state_manager.get_item('face_occluder_model')
+ 		)
+ 		FACE_PARSER_MODEL_DROPDOWN = gradio.Dropdown(
+ 			label = translator.get('uis.face_parser_model_dropdown'),
+-			choices = facefusion.choices.face_parser_models,
++			choices = translator.localize_choices(facefusion.choices.face_parser_models),
+ 			value = state_manager.get_item('face_parser_model')
+ 		)
+ 	FACE_MASK_TYPES_CHECKBOX_GROUP = gradio.CheckboxGroup(
+ 		label = translator.get('uis.face_mask_types_checkbox_group'),
+-		choices = facefusion.choices.face_mask_types,
++		choices = translator.localize_choices(facefusion.choices.face_mask_types),
+ 		value = state_manager.get_item('face_mask_types')
+ 	)
+ 	FACE_MASK_AREAS_CHECKBOX_GROUP = gradio.CheckboxGroup(
+ 		label = translator.get('uis.face_mask_areas_checkbox_group'),
+-		choices = facefusion.choices.face_mask_areas,
++		choices = translator.localize_choices(facefusion.choices.face_mask_areas),
+ 		value = state_manager.get_item('face_mask_areas'),
+ 		visible = has_area_mask
+ 	)
+ 	FACE_MASK_REGIONS_CHECKBOX_GROUP = gradio.CheckboxGroup(
+ 		label = translator.get('uis.face_mask_regions_checkbox_group'),
+-		choices = facefusion.choices.face_mask_regions,
++		choices = translator.localize_choices(facefusion.choices.face_mask_regions),
+ 		value = state_manager.get_item('face_mask_regions'),
+ 		visible = has_region_mask
+ 	)
+diff --git a/facefusion/uis/components/face_selector.py b/facefusion/uis/components/face_selector.py
+index ea744f9..3e1ca76 100644
+--- a/facefusion/uis/components/face_selector.py
++++ b/facefusion/uis/components/face_selector.py
+@@ -53,7 +53,7 @@ def render() -> None:
+ 		reference_face_gallery_options['value'] = extract_gallery_frames(source_vision_frames, target_vision_frame)
+ 	FACE_SELECTOR_MODE_DROPDOWN = gradio.Dropdown(
+ 		label = translator.get('uis.face_selector_mode_dropdown'),
+-		choices = facefusion.choices.face_selector_modes,
++		choices = translator.localize_choices(facefusion.choices.face_selector_modes, { 'many': '多人（全部人脸）' }),
+ 		value = state_manager.get_item('face_selector_mode')
+ 	)
+ 	REFERENCE_FACE_POSITION_GALLERY = gradio.Gallery(**reference_face_gallery_options)
+@@ -61,17 +61,17 @@ def render() -> None:
+ 		with gradio.Row():
+ 			FACE_SELECTOR_ORDER_DROPDOWN = gradio.Dropdown(
+ 				label = translator.get('uis.face_selector_order_dropdown'),
+-				choices = facefusion.choices.face_selector_orders,
++				choices = translator.localize_choices(facefusion.choices.face_selector_orders),
+ 				value = state_manager.get_item('face_selector_order')
+ 			)
+ 			FACE_SELECTOR_GENDER_DROPDOWN = gradio.Dropdown(
+ 				label = translator.get('uis.face_selector_gender_dropdown'),
+-				choices = [ 'none' ] + facefusion.choices.face_selector_genders,
++				choices = translator.localize_choices([ 'none' ] + facefusion.choices.face_selector_genders),
+ 				value = state_manager.get_item('face_selector_gender') or 'none'
+ 			)
+ 			FACE_SELECTOR_RACE_DROPDOWN = gradio.Dropdown(
+ 				label = translator.get('uis.face_selector_race_dropdown'),
+-				choices = [ 'none' ] + facefusion.choices.face_selector_races,
++				choices = translator.localize_choices([ 'none' ] + facefusion.choices.face_selector_races),
+ 				value = state_manager.get_item('face_selector_race') or 'none'
+ 			)
+ 		with gradio.Row():
+diff --git a/facefusion/uis/components/face_swapper_options.py b/facefusion/uis/components/face_swapper_options.py
+index d67998b..72a640a 100755
+--- a/facefusion/uis/components/face_swapper_options.py
++++ b/facefusion/uis/components/face_swapper_options.py
+@@ -22,7 +22,7 @@ def render() -> None:
+ 	has_face_swapper = 'face_swapper' in state_manager.get_item('processors')
+ 	FACE_SWAPPER_MODEL_DROPDOWN = gradio.Dropdown(
+ 		label = translator.get('uis.model_dropdown', 'facefusion.processors.modules.face_swapper'),
+-		choices = face_swapper_choices.face_swapper_models,
++		choices = translator.localize_choices(face_swapper_choices.face_swapper_models),
+ 		value = state_manager.get_item('face_swapper_model'),
+ 		visible = has_face_swapper
+ 	)
+diff --git a/facefusion/uis/components/frame_colorizer_options.py b/facefusion/uis/components/frame_colorizer_options.py
+index e987264..71c68d7 100755
+--- a/facefusion/uis/components/frame_colorizer_options.py
++++ b/facefusion/uis/components/frame_colorizer_options.py
+@@ -22,7 +22,7 @@ def render() -> None:
+ 	has_frame_colorizer = 'frame_colorizer' in state_manager.get_item('processors')
+ 	FRAME_COLORIZER_MODEL_DROPDOWN = gradio.Dropdown(
+ 		label = translator.get('uis.model_dropdown', 'facefusion.processors.modules.frame_colorizer'),
+-		choices = frame_colorizer_choices.frame_colorizer_models,
++		choices = translator.localize_choices(frame_colorizer_choices.frame_colorizer_models),
+ 		value = state_manager.get_item('frame_colorizer_model'),
+ 		visible = has_frame_colorizer
+ 	)
+diff --git a/facefusion/uis/components/frame_enhancer_options.py b/facefusion/uis/components/frame_enhancer_options.py
+index 3041fce..1aba1ac 100755
+--- a/facefusion/uis/components/frame_enhancer_options.py
++++ b/facefusion/uis/components/frame_enhancer_options.py
+@@ -20,7 +20,7 @@ def render() -> None:
+ 	has_frame_enhancer = 'frame_enhancer' in state_manager.get_item('processors')
+ 	FRAME_ENHANCER_MODEL_DROPDOWN = gradio.Dropdown(
+ 		label = translator.get('uis.model_dropdown', 'facefusion.processors.modules.frame_enhancer'),
+-		choices = frame_enhancer_choices.frame_enhancer_models,
++		choices = translator.localize_choices(frame_enhancer_choices.frame_enhancer_models),
+ 		value = state_manager.get_item('frame_enhancer_model'),
+ 		visible = has_frame_enhancer
+ 	)
+diff --git a/facefusion/uis/components/job_list_options.py b/facefusion/uis/components/job_list_options.py
+index 2213165..3d07d70 100644
+--- a/facefusion/uis/components/job_list_options.py
++++ b/facefusion/uis/components/job_list_options.py
+@@ -20,7 +20,7 @@ def render() -> None:
+ 
+ 		JOB_LIST_JOB_STATUS_CHECKBOX_GROUP = gradio.CheckboxGroup(
+ 			label = translator.get('uis.job_list_status_checkbox_group'),
+-			choices = facefusion.choices.job_statuses,
++			choices = translator.localize_choices(facefusion.choices.job_statuses),
+ 			value = job_status
+ 		)
+ 		register_ui_component('job_list_job_status_checkbox_group', JOB_LIST_JOB_STATUS_CHECKBOX_GROUP)
+diff --git a/facefusion/uis/components/job_manager.py b/facefusion/uis/components/job_manager.py
+index cbb5197..4c788b4 100644
+--- a/facefusion/uis/components/job_manager.py
++++ b/facefusion/uis/components/job_manager.py
+@@ -36,7 +36,7 @@ def render() -> None:
+ 		with gradio.Column(visible = is_job_manager) as JOB_MANAGER_WRAPPER:
+ 			JOB_MANAGER_JOB_ACTION_DROPDOWN = gradio.Dropdown(
+ 				label = translator.get('uis.job_manager_job_action_dropdown'),
+-				choices = uis_choices.job_manager_actions,
++				choices = translator.localize_choices(uis_choices.job_manager_actions),
+ 				value = get_first(uis_choices.job_manager_actions)
+ 			)
+ 			JOB_MANAGER_JOB_ID_TEXTBOX = gradio.Textbox(
+@@ -46,14 +46,14 @@ def render() -> None:
+ 			)
+ 			JOB_MANAGER_JOB_ID_DROPDOWN = gradio.Dropdown(
+ 				label = translator.get('uis.job_manager_job_id_dropdown'),
+-				choices = drafted_job_ids,
++				choices = translator.localize_choices(drafted_job_ids),
+ 				value = get_last(drafted_job_ids),
+ 				interactive = True,
+ 				visible = False
+ 			)
+ 			JOB_MANAGER_STEP_INDEX_DROPDOWN = gradio.Dropdown(
+ 				label = translator.get('uis.job_manager_step_index_dropdown'),
+-				choices = [ 'none' ],
++				choices = translator.localize_choices([ 'none' ]),
+ 				value = 'none',
+ 				interactive = True,
+ 				visible = False
+diff --git a/facefusion/uis/components/job_runner.py b/facefusion/uis/components/job_runner.py
+index dc3d771..a93480e 100644
+--- a/facefusion/uis/components/job_runner.py
++++ b/facefusion/uis/components/job_runner.py
+@@ -34,12 +34,12 @@ def render() -> None:
+ 		with gradio.Column(visible = is_job_runner) as JOB_RUNNER_WRAPPER:
+ 			JOB_RUNNER_JOB_ACTION_DROPDOWN = gradio.Dropdown(
+ 				label = translator.get('uis.job_runner_job_action_dropdown'),
+-				choices = uis_choices.job_runner_actions,
++				choices = translator.localize_choices(uis_choices.job_runner_actions),
+ 				value = get_first(uis_choices.job_runner_actions)
+ 			)
+ 			JOB_RUNNER_JOB_ID_DROPDOWN = gradio.Dropdown(
+ 				label = translator.get('uis.job_runner_job_id_dropdown'),
+-				choices = queued_job_ids,
++				choices = translator.localize_choices(queued_job_ids),
+ 				value = get_last(queued_job_ids)
+ 			)
+ 			with gradio.Row():
+diff --git a/facefusion/uis/components/lip_syncer_options.py b/facefusion/uis/components/lip_syncer_options.py
+index a673cda..04461fb 100755
+--- a/facefusion/uis/components/lip_syncer_options.py
++++ b/facefusion/uis/components/lip_syncer_options.py
+@@ -20,7 +20,7 @@ def render() -> None:
+ 	has_lip_syncer = 'lip_syncer' in state_manager.get_item('processors')
+ 	LIP_SYNCER_MODEL_DROPDOWN = gradio.Dropdown(
+ 		label = translator.get('uis.model_dropdown', 'facefusion.processors.modules.lip_syncer'),
+-		choices = lip_syncer_choices.lip_syncer_models,
++		choices = translator.localize_choices(lip_syncer_choices.lip_syncer_models),
+ 		value = state_manager.get_item('lip_syncer_model'),
+ 		visible = has_lip_syncer
+ 	)
+diff --git a/facefusion/uis/components/memory.py b/facefusion/uis/components/memory.py
+index 07f6b47..6518d8f 100644
+--- a/facefusion/uis/components/memory.py
++++ b/facefusion/uis/components/memory.py
+@@ -14,7 +14,7 @@ def render() -> None:
+ 
+ 	VIDEO_MEMORY_STRATEGY_DROPDOWN = gradio.Dropdown(
+ 		label = translator.get('uis.video_memory_strategy_dropdown'),
+-		choices = facefusion.choices.video_memory_strategies,
++		choices = translator.localize_choices(facefusion.choices.video_memory_strategies),
+ 		value = state_manager.get_item('video_memory_strategy')
+ 	)
+ 
+diff --git a/facefusion/uis/components/output_options.py b/facefusion/uis/components/output_options.py
+index e4e84d7..e4d9f2a 100644
+--- a/facefusion/uis/components/output_options.py
++++ b/facefusion/uis/components/output_options.py
+@@ -57,7 +57,7 @@ def render() -> None:
+ 	)
+ 	OUTPUT_AUDIO_ENCODER_DROPDOWN = gradio.Dropdown(
+ 		label = translator.get('uis.output_audio_encoder_dropdown'),
+-		choices = available_encoder_set.get('audio'),
++		choices = translator.localize_choices(available_encoder_set.get('audio')),
+ 		value = state_manager.get_item('output_audio_encoder'),
+ 		visible = is_video(state_manager.get_item('target_path'))
+ 	)
+@@ -79,13 +79,13 @@ def render() -> None:
+ 	)
+ 	OUTPUT_VIDEO_ENCODER_DROPDOWN = gradio.Dropdown(
+ 		label = translator.get('uis.output_video_encoder_dropdown'),
+-		choices = available_encoder_set.get('video'),
++		choices = translator.localize_choices(available_encoder_set.get('video')),
+ 		value = state_manager.get_item('output_video_encoder'),
+ 		visible = is_video(state_manager.get_item('target_path'))
+ 	)
+ 	OUTPUT_VIDEO_PRESET_DROPDOWN = gradio.Dropdown(
+ 		label = translator.get('uis.output_video_preset_dropdown'),
+-		choices = facefusion.choices.output_video_presets,
++		choices = translator.localize_choices(facefusion.choices.output_video_presets),
+ 		value = state_manager.get_item('output_video_preset'),
+ 		visible = is_video(state_manager.get_item('target_path'))
+ 	)
+diff --git a/facefusion/uis/components/preview_options.py b/facefusion/uis/components/preview_options.py
+index 0dcf3c7..0c27f2f 100644
+--- a/facefusion/uis/components/preview_options.py
++++ b/facefusion/uis/components/preview_options.py
+@@ -35,13 +35,13 @@ def render() -> None:
+ 		PREVIEW_MODE_DROPDOWN = gradio.Dropdown(
+ 			label = translator.get('uis.preview_mode_dropdown'),
+ 			value = uis_choices.preview_modes[0],
+-			choices = uis_choices.preview_modes,
++			choices = translator.localize_choices(uis_choices.preview_modes),
+ 			visible = True
+ 		)
+ 		PREVIEW_RESOLUTION_DROPDOWN = gradio.Dropdown(
+ 			label = translator.get('uis.preview_resolution_dropdown'),
+ 			value = uis_choices.preview_resolutions[-1],
+-			choices = uis_choices.preview_resolutions,
++			choices = translator.localize_choices(uis_choices.preview_resolutions),
+ 			visible = True
+ 		)
+ 	register_ui_component('preview_mode_dropdown', PREVIEW_MODE_DROPDOWN)
+diff --git a/facefusion/uis/components/processors.py b/facefusion/uis/components/processors.py
+index 2b798d9..f9a9225 100644
+--- a/facefusion/uis/components/processors.py
++++ b/facefusion/uis/components/processors.py
+@@ -1,4 +1,4 @@
+-from typing import List, Optional
++from typing import List, Optional, Tuple
+ 
+ import gradio
+ 
+@@ -38,7 +38,7 @@ def update_processors(processors : List[str]) -> gradio.CheckboxGroup:
+ 	return gradio.CheckboxGroup(value = state_manager.get_item('processors'), choices = sort_processors(state_manager.get_item('processors')))
+ 
+ 
+-def sort_processors(processors : List[str]) -> List[str]:
++def sort_processors(processors : List[str]) -> List[Tuple[str, str]]:
+ 	available_processors = [ get_file_name(file_path) for file_path in resolve_file_paths('facefusion/processors/modules') ]
+ 	current_processors = []
+ 
+@@ -46,4 +46,9 @@ def sort_processors(processors : List[str]) -> List[str]:
+ 		if processor in available_processors and processor not in current_processors:
+ 			current_processors.append(processor)
+ 
+-	return current_processors
++	return [ (resolve_processor_label(processor), processor) for processor in current_processors ]
++
++
++def resolve_processor_label(processor : str) -> str:
++	label = translator.get('processors.' + processor)
++	return label if label else processor
+diff --git a/facefusion/uis/components/temp_frame.py b/facefusion/uis/components/temp_frame.py
+index bfd0e3d..bb514eb 100644
+--- a/facefusion/uis/components/temp_frame.py
++++ b/facefusion/uis/components/temp_frame.py
+@@ -16,7 +16,7 @@ def render() -> None:
+ 
+ 	TEMP_FRAME_FORMAT_DROPDOWN = gradio.Dropdown(
+ 		label = translator.get('uis.temp_frame_format_dropdown'),
+-		choices = facefusion.choices.temp_frame_formats,
++		choices = translator.localize_choices(facefusion.choices.temp_frame_formats),
+ 		value = state_manager.get_item('temp_frame_format'),
+ 		visible = is_video(state_manager.get_item('target_path'))
+ 	)
+diff --git a/facefusion/uis/components/terminal.py b/facefusion/uis/components/terminal.py
+index dcd4f85..d677440 100644
+--- a/facefusion/uis/components/terminal.py
++++ b/facefusion/uis/components/terminal.py
+@@ -24,7 +24,7 @@ def render() -> None:
+ 
+ 	LOG_LEVEL_DROPDOWN = gradio.Dropdown(
+ 		label = translator.get('uis.log_level_dropdown'),
+-		choices = facefusion.choices.log_levels,
++		choices = translator.localize_choices(facefusion.choices.log_levels),
+ 		value = state_manager.get_item('log_level')
+ 	)
+ 	TERMINAL_TEXTBOX = gradio.Textbox(
+diff --git a/facefusion/uis/components/ui_workflow.py b/facefusion/uis/components/ui_workflow.py
+index 5090969..4604fbf 100644
+--- a/facefusion/uis/components/ui_workflow.py
++++ b/facefusion/uis/components/ui_workflow.py
+@@ -14,7 +14,7 @@ def render() -> None:
+ 
+ 	UI_WORKFLOW_DROPDOWN = gradio.Dropdown(
+ 		label = translator.get('uis.ui_workflow'),
+-		choices = facefusion.choices.ui_workflows,
++		choices = translator.localize_choices(facefusion.choices.ui_workflows),
+ 		value = state_manager.get_item('ui_workflow'),
+ 		interactive = True
+ 	)
+diff --git a/facefusion/uis/components/voice_extractor.py b/facefusion/uis/components/voice_extractor.py
+index 7ea3893..a99811d 100644
+--- a/facefusion/uis/components/voice_extractor.py
++++ b/facefusion/uis/components/voice_extractor.py
+@@ -17,7 +17,7 @@ def render() -> None:
+ 	has_lip_syncer = 'lip_syncer' in state_manager.get_item('processors')
+ 	VOICE_EXTRACTOR_MODEL_DROPDOWN = gradio.Dropdown(
+ 		label = translator.get('uis.voice_extractor_model_dropdown'),
+-		choices = facefusion.choices.voice_extractor_models,
++		choices = translator.localize_choices(facefusion.choices.voice_extractor_models),
+ 		value = state_manager.get_item('voice_extractor_model'),
+ 		visible = is_video(state_manager.get_item('target_path')) and has_lip_syncer
+ 	)
+diff --git a/facefusion/uis/components/webcam_options.py b/facefusion/uis/components/webcam_options.py
+index e3a8bf7..5a3bdde 100644
+--- a/facefusion/uis/components/webcam_options.py
++++ b/facefusion/uis/components/webcam_options.py
+@@ -24,11 +24,11 @@ def render() -> None:
+ 	WEBCAM_DEVICE_ID_DROPDOWN = gradio.Dropdown(
+ 		value = get_first(local_camera_ids),
+ 		label = translator.get('uis.webcam_device_id_dropdown'),
+-		choices = local_camera_ids
++		choices = translator.localize_choices(local_camera_ids)
+ 	)
+ 	WEBCAM_MODE_RADIO = gradio.Radio(
+ 		label = translator.get('uis.webcam_mode_radio'),
+-		choices = uis_choices.webcam_modes,
++		choices = translator.localize_choices(uis_choices.webcam_modes),
+ 		value = uis_choices.webcam_modes[0]
+ 	)
+ 	WEBCAM_RESOLUTION_DROPDOWN = gradio.Dropdown(
+diff --git a/facefusion/uis/components/workflow.py b/facefusion/uis/components/workflow.py
+index 37492cd..e63453a 100644
+--- a/facefusion/uis/components/workflow.py
++++ b/facefusion/uis/components/workflow.py
+@@ -14,7 +14,7 @@ def render() -> None:
+ 
+ 	WORKFLOW_STRATEGY_DROPDOWN = gradio.Dropdown(
+ 		label = translator.get('uis.workflow_strategy_dropdown'),
+-		choices = facefusion.choices.workflow_strategies,
++		choices = translator.localize_choices(facefusion.choices.workflow_strategies),
+ 		value = state_manager.get_item('workflow_strategy')
+ 	)
+ 
+-- 
+2.55.0.windows.3
+
