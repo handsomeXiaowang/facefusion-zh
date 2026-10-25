@@ -10,10 +10,11 @@ FaceFusion 3.9.1 的**中文汉化**与**Windows 启动增强**，只包含改�
 | 文件 | 作用 |
 |---|---|
 | `zh-local.patch` | 汉化补丁（46 个文件，+691 −63） |
-| `FaceFusion托盘.ps1` | 系统托盘图标，右键菜单「打开网页 / 退出」 |
+| `FaceFusion托盘.ps1` | 系统托盘图标：**左键单击**打开网页，右键菜单「打开网页 / 退出」 |
 | `启动FaceFusion.bat` | 双击启动，自动配环境并开浏览器 |
 | `下载全部模型.bat` | 补下全部模型（含 24 个 dfm，约 16 GB） |
 | `更新FaceFusion.ps1` | 升级 FaceFusion 后自动重新应用汉化 |
+| `创建快捷方式.ps1` | 在开始菜单创建托盘启动快捷方式 |
 
 ## 汉化包含什么
 
@@ -45,6 +46,8 @@ python install.py directml --skip-conda
 python facefusion.py force-download
 
 # 5. 把本仓库的 4 个脚本拷到 facefusion 仓库外层，双击启动
+# 6. 创建开始菜单快捷方式（指向托盘）
+powershell -ExecutionPolicy Bypass -File 创建快捷方式.ps1
 ```
 
 > **注意**：补丁基于 **3.9.1**。若上游版本更新导致 `git apply` 冲突，
